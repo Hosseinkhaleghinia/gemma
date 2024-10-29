@@ -101,7 +101,6 @@ class _CryptoListState extends State<CryptoList>
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => MarketMapWidget(
-                            data: data,
                             currencyType: _tabController!.index == 0
                                 ? CurrencyType.tether
                                 : CurrencyType.irt,
@@ -202,7 +201,7 @@ class _CryptoListState extends State<CryptoList>
           return const Center(
             child: SpinKitCircle(
               size: 70,
-              color: Colors.blue,
+              color: blue100Safaii,
             ),
           );
         }
@@ -414,9 +413,9 @@ class _CryptoListState extends State<CryptoList>
             ),
           );
         }
-        return const SpinKitCircle(
-          color: Colors.blue,
-          size: 20,
+        return const SpinKitPulse(
+          color: backgrand,
+          size: 25,
         );
       },
     );

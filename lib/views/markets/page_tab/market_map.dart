@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gemma/assets/colors.dart';
 import 'package:gemma/models/crypto_state.dart';
 import 'package:gemma/providers/crypto_data_provider.dart';
+import 'package:provider/provider.dart';
 
 class MarketMapWidget extends StatefulWidget {
-  final List<Crypto> data;
-  final CurrencyType currencyType; // نگه داشتن پارامتر ورودی
+  final CurrencyType currencyType;
   final double padding;
 
   MarketMapWidget({
     Key? key,
-    required this.data,
-    required this.currencyType, // همچنان required نگه داشته شده
+    required this.currencyType,
     this.padding = 2.0,
   }) : super(key: key);
 
@@ -21,12 +21,15 @@ class MarketMapWidget extends StatefulWidget {
 }
 
 class _MarketMapWidgetState extends State<MarketMapWidget> {
-  late CurrencyType _currencyType; // متغیر برای نگهداری state داخلی
+  late CurrencyType _currencyType;
+  OverlayEntry? _overlayEntry;
+  Crypto? _selectedCrypto;
+  Offset? _tapPosition;
 
   @override
   void initState() {
     super.initState();
-    _currencyType = widget.currencyType; // مقداردهی اولیه از widget
+    _currencyType = widget.currencyType;
   }
 
   void _toggleCurrencyType() {
@@ -34,133 +37,306 @@ class _MarketMapWidgetState extends State<MarketMapWidget> {
       _currencyType = _currencyType == CurrencyType.tether
           ? CurrencyType.irt
           : CurrencyType.tether;
+      _removeOverlay();
     });
   }
 
   double _parseVolume(String volume) {
-    // منطق پارس کردن حجم معاملات رو اینجا پیاده‌سازی کنید
-    // مثلا: حذف کاراکترهای غیر عددی و تبدیل به double
     return double.tryParse(volume.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
   }
 
-
   @override
   Widget build(BuildContext context) {
-    final sortedData = List<Crypto>.from(widget.data)
-      ..sort((a, b) {
-        final aMarketCap = _parseVolume(a.volumeSrc!);
-        final bMarketCap = _parseVolume(b.volumeSrc!);
-        return bMarketCap.compareTo(aMarketCap);
-      });
+    return Consumer<CryptoDataProvider>(
+      builder: (context, provider, child) {
+        // دریافت داده‌ها بر اساس نوع ارز
+        final data = _currencyType == CurrencyType.tether
+            ? provider.getTetherList()
+            : provider.getIRTList();
 
-    return Scaffold(
-      backgroundColor: blue100Safaii,
-      appBar: AppBar(
-        backgroundColor: blue100Safaii,
-          elevation: 0,
-          title: Text(
-            _currencyType == CurrencyType.tether
-                ? 'نقشه بازار تتری'
-                : 'نقشه بازار تومانی',
-            style: TextStyle(fontSize: 16),
+        // مرتب‌سازی داده‌ها بر اساس حجم معاملات
+        final sortedData = List<Crypto>.from(data)
+          ..sort((a, b) {
+            final aVolume = _parseVolume(a.volumeSrc!);
+            final bVolume = _parseVolume(b.volumeSrc!);
+            return bVolume.compareTo(aVolume);
+          });
+
+        return Scaffold(
+          backgroundColor: blue100Safaii,
+          appBar: AppBar(
+            backgroundColor: blue100Safaii,
+            elevation: 0,
+            title: Text(
+              _currencyType == CurrencyType.tether
+                  ? 'نقشه بازار تتری'
+                  : 'نقشه بازار تومانی',
+              style: TextStyle(fontSize: 16),
+            ),
+            centerTitle: true,
+            actions: [
+              IconButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                icon: Transform.scale(
+                  scaleX: -1,
+                  child: Icon(Icons.arrow_back),
+                ),
+              )
+            ],
+            leading: IconButton(
+                onPressed: _toggleCurrencyType,
+                icon: _currencyType == CurrencyType.tether
+                    ? SvgPicture.asset(
+                        'images/iran.svg',
+                        width: 25,
+                        height: 25,
+                      )
+                    : SvgPicture.asset(
+                        'images/usdt.svg',
+                        width: 25,
+                        height: 25,
+                      )),
           ),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              icon: Transform.scale(
-                scaleX: -1,
-                child: Icon(
-                  Icons.arrow_back,
+          body: provider.isLoading
+              ? Center(
+                  child: SpinKitCircle(
+                  size: 70,
+                  color: backgrand,
+                ))
+              : Padding(
+                  padding: EdgeInsets.all(0),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final boxes = _calculateBoxSizes(
+                        sortedData,
+                        constraints.maxWidth,
+                        constraints.maxHeight,
+                      );
+
+                      return Stack(
+                        children: [
+                          for (int i = 0; i < boxes.length; i++)
+                            Positioned(
+                              left: boxes[i].left,
+                              top: boxes[i].top,
+                              width: boxes[i].width,
+                              height: boxes[i].height,
+                              child: Padding(
+                                padding: EdgeInsets.all(widget.padding),
+                                child: _buildBox(
+                                  sortedData[i],
+                                  boxes[i].height,
+                                  _currencyType,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+        );
+      },
+    );
+  }
+
+  void _handleTap(Crypto crypto, TapDownDetails details) {
+    final boxSize = context.size ?? Size.zero;
+
+    // اگر روی همان باکس قبلی کلیک شده
+    if (_selectedCrypto?.symbol == crypto.symbol) {
+      _removeOverlay();
+    } else {
+      // اگر روی باکس جدید کلیک شده، مستقیماً overlay جدید را نمایش بده
+      _showDetailsOverlay(crypto, details.globalPosition, boxSize);
+    }
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    setState(() {
+      _selectedCrypto = null;
+      _tapPosition = null;
+    });
+  }
+
+  void _showDetailsOverlay(Crypto crypto, Offset tapPosition, Size boxSize) {
+    // اگر crypto جدید با crypto قبلی یکسان است، overlay را حذف کن
+    if (_selectedCrypto?.symbol == crypto.symbol) {
+      _removeOverlay();
+      return;
+    }
+
+    // قبل از نمایش overlay جدید، overlay قبلی را حذف کن
+    _overlayEntry?.remove();
+
+    setState(() {
+      _selectedCrypto = crypto;
+      _tapPosition = tapPosition;
+    });
+
+    final overlay = Overlay.of(context);
+    final renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTapDown: (_) => _removeOverlay(),
+              child: Container(
+                color: Colors.transparent,
+              ),
+            ),
+          ),
+          Positioned(
+            left: _calculateOverlayPosition(tapPosition.dx, size.width, 200.0),
+            top: _calculateOverlayPosition(tapPosition.dy, size.height, 150.0),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 200,
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      crypto.symbol ?? '',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    _detailRow('قیمت:', '${_getPriceWithCurrency(crypto)}'),
+                    _detailRow('تغییر روزانه:', '${crypto.dayChange ?? 0}%'),
+                    _detailRow('حجم معاملات:', crypto.volumeSrc ?? '0'),
+                    _detailRow('حجم معاملات مقصد:', crypto.volumeDst ?? '0'),
+                  ],
                 ),
               ),
-            )
-          ],
-          leading: IconButton(
-            onPressed: _toggleCurrencyType,
-            icon: _currencyType == CurrencyType.tether
-                ? SvgPicture.asset(
-              'images/usdt.svg',
-              width: 25,
-              height: 25,
-            )
-                : SvgPicture.asset(
-              'images/iran.svg',
-              width: 25,
-              height: 25,
             ),
-          )),
-      body: Padding(
-        padding: EdgeInsets.all(0),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final boxes = _calculateBoxSizes(
-              sortedData,
-              constraints.maxWidth,
-              constraints.maxHeight,
-            );
-
-            return Stack(
-              children: [
-                for (int i = 0; i < boxes.length; i++)
-                  Positioned(
-                    left: boxes[i].left,
-                    top: boxes[i].top,
-                    width: boxes[i].width,
-                    height: boxes[i].height,
-                    child: Padding(
-                      padding: EdgeInsets.all(widget.padding),
-                      child: _buildBox(
-                          sortedData[i], boxes[i].height, _currencyType),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
+          ),
+        ],
       ),
     );
+
+    overlay.insert(_overlayEntry!);
+  }
+
+  String _getPriceWithCurrency(Crypto crypto) {
+    if (_currencyType == CurrencyType.tether) {
+      return '\$${crypto.latestPrice}';
+    } else {
+      return '${crypto.latestPrice} تومان';
+    }
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _calculateOverlayPosition(
+      double tapPos, double maxSize, double overlaySize) {
+    double position = tapPos - (overlaySize / 2);
+
+    if (position < 10) {
+      position = 10;
+    } else if (position + overlaySize > maxSize - 10) {
+      position = maxSize - overlaySize - 10;
+    }
+
+    return position;
   }
 
   Widget _buildBox(Crypto data, double boxHeight, CurrencyType currencyType) {
     String pricePrefix = currencyType == CurrencyType.tether ? '\$' : '';
     String priceSuffix = currencyType == CurrencyType.irt ? ' تومان' : '';
     final safeDayChange = data.dayChange ?? 0;
+    final isSelected = _selectedCrypto?.symbol == data.symbol;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _getBackgroundColor(safeDayChange),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final TextStyle style = TextStyle(fontSize: 16);
-          String displayText = '';
+    return GestureDetector(
+      onTapDown: (TapDownDetails details) {
+        final boxSize = context.size ?? Size.zero;
+        _showDetailsOverlay(data, details.globalPosition, boxSize);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.grey[700]
+              : _getBackgroundColor(safeDayChange),
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected
+              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1)
+              : null,
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final TextStyle style = TextStyle(
+              fontSize: 16,
+              color: isSelected ? Colors.white : null,
+            );
+            String displayText = '';
 
-          // تعیین متن نمایشی بر اساس عرض در دسترس
-          if (constraints.maxWidth > 200) {
-            displayText = '${data.symbol!}\n$pricePrefix${data.latestPrice}$priceSuffix\n${safeDayChange}';
-          } else if (constraints.maxWidth > 150) {
-            displayText = '${data.symbol!}\n$pricePrefix${data.latestPrice}$priceSuffix';
-          } else {
-            // برای فضاهای خیلی کوچک، حداقل یک حرف نمایش داده می‌شود
-            displayText = _getMinimalText(data.symbol!);
-          }
+            if (constraints.maxWidth > 200) {
+              displayText =
+                  '${data.symbol!}\n$pricePrefix${data.latestPrice}$priceSuffix\n${safeDayChange}';
+            } else if (constraints.maxWidth > 150) {
+              displayText =
+                  '${data.symbol!}\n$pricePrefix${data.latestPrice}$priceSuffix';
+            } else {
+              displayText = _getMinimalText(data.symbol!);
+            }
 
-          return Center(
-            child: Container(
-              width: constraints.maxWidth,
-              child: Text(
-                _truncateText(displayText, constraints.maxWidth - 16, style, context),
-                style: style,
-                textAlign: TextAlign.center, // تنظیم متن به صورت وسط‌چین
-                overflow: TextOverflow.ellipsis,
+            return Center(
+              child: Container(
+                width: constraints.maxWidth,
+                child: Text(
+                  _truncateText(
+                      displayText, constraints.maxWidth - 16, style, context),
+                  style: style,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -174,7 +350,8 @@ class _MarketMapWidgetState extends State<MarketMapWidget> {
     return symbol[0];
   }
 
-  String _truncateText(String text, double maxWidth, TextStyle style, BuildContext context) {
+  String _truncateText(
+      String text, double maxWidth, TextStyle style, BuildContext context) {
     final TextPainter textPainter = TextPainter(
       text: TextSpan(text: text, style: style),
       maxLines: 1,
@@ -210,14 +387,15 @@ class _MarketMapWidgetState extends State<MarketMapWidget> {
   }
 
   double _calculateTotalVolume(List<Crypto> data) {
-    return data.fold(0.0, (sum, crypto) => sum + _parseVolume(crypto.volumeSrc!));
+    return data.fold(
+        0.0, (sum, crypto) => sum + _parseVolume(crypto.volumeSrc!));
   }
 
   List<BoxPosition> _calculateBoxSizes(
-      List<Crypto> data,
-      double containerWidth,
-      double containerHeight,
-      ) {
+    List<Crypto> data,
+    double containerWidth,
+    double containerHeight,
+  ) {
     final List<BoxPosition> positions = [];
     double currentX = 0;
     double currentY = 0;
@@ -303,6 +481,3 @@ class BoxPosition {
     required this.height,
   });
 }
-
-
-

@@ -63,7 +63,7 @@ class CryptoDataProvider with ChangeNotifier {
     return numberFormat.format(double.parse(priceStr));
   }
 
-  String formatVolumeSrt(String volume) {
+  String formatVolumeDst(String volume) {
     if (volume != null) {
       double? volumeSrt = double.tryParse(volume.toString());
       volume = numberFormat.format(volumeSrt);
@@ -248,6 +248,7 @@ class CryptoDataProvider with ChangeNotifier {
             formattedPrice = formatPrice(dividedPrice);
           }
 
+
           _irtData.add(Crypto(
             coin['name'],
             formattedPrice,
@@ -259,7 +260,7 @@ class CryptoDataProvider with ChangeNotifier {
             null,
             null,
             null,
-            formatVolumeSrt(coin['24hVolume']).toString(),
+            formatVolumeDst(cryptoStats['volumeDst']).toString(),
             null,
             null,
             coin['iconUrl'],
@@ -285,7 +286,7 @@ class CryptoDataProvider with ChangeNotifier {
             null,
             null,
             null,
-            formatVolumeSrt(coin['24hVolume']).toString(),
+            formatVolumeDst(cryptoStats['volumeDst']).toString(),
             null,
             null,
             coin['iconUrl'],
