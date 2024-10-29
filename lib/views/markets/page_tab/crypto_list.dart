@@ -76,106 +76,122 @@ class _CryptoListState extends State<CryptoList>
     _tabController?.dispose();
     super.dispose();
   }
-  
+
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
 
-    return Column(
-      children: [
-        Container(
-          //margin: const EdgeInsets.symmetric(vertical: 0),
-          child: Row(
-            //textDirection: TextDirection.rtl,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: () {},
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.black,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.arrow_back_ios_sharp,
-                      size: 14,
-                      color: Colors.black,
-                    ),
-                    SizedBox(
-                      width: 4,
-                    ),
-                    Text(
-                      'نقشه بازار',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: (width - 20) * 0.5,
-                child: TabBar(
-                  tabs: [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('تتری'),
-                          const SizedBox(width: 8),
-                          SvgPicture.asset(
-                            'images/usdt.svg',
-                            width: 20,
-                            height: 20,
+    return Consumer<CryptoDataProvider>(
+      builder: (context, cryptoProvider, child) {
+        return Column(
+          children: [
+            Container(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      // اگر تب فعلی تتری است، لیست تتری را ارسال می‌کنیم
+                      // در غیر این صورت لیست تومانی ارسال می‌شود
+                      final data = _tabController?.index == 0
+                          ? cryptoProvider.getTetherList()
+                          : cryptoProvider.getIRTList();
+
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => MarketMapWidget(
+                            data: data,
+                            currencyType: _tabController!.index == 0
+                                ? CurrencyType.tether
+                                : CurrencyType.irt,
                           ),
-                        ],
-                      ),
+                        ),
+                      );
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.black,
                     ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('تومانی'),
-                          const SizedBox(width: 8),
-                          SvgPicture.asset(
-                            'images/iran.svg',
-                            width: 20,
-                            height: 20,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.arrow_back_ios_sharp,
+                          size: 14,
+                          color: Colors.black,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'نقشه بازار',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.black,
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: (width - 20) * 0.5,
+                    child: TabBar(
+                      tabs: [
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('تتری'),
+                              const SizedBox(width: 8),
+                              SvgPicture.asset(
+                                'images/usdt.svg',
+                                width: 20,
+                                height: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('تومانی'),
+                              const SizedBox(width: 8),
+                              SvgPicture.asset(
+                                'images/iran.svg',
+                                width: 20,
+                                height: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      controller: _tabController,
+                      labelColor: blue20Safaii,
+                      unselectedLabelColor: Colors.grey,
+                      indicator: BoxDecoration(
+                        border: Border.all(style: BorderStyle.none),
                       ),
                     ),
-                  ],
-                  controller: _tabController,
-                  //indicatorWeight: 3,
-                  labelColor: blue20Safaii,
-                  unselectedLabelColor: Colors.grey,
-                  indicator: BoxDecoration(border: Border.all(style: BorderStyle.none)),
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-        Divider(
-          color: Colors.grey,
-          thickness: 1.0,
-          height: 1,
-        ),
-        SizedBox(
-          height: 10,
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildTabContent(width, true), // تتری
-              _buildTabContent(width, false), // تومانی
-            ],
-          ),
-        ),
-      ],
+            ),
+            Divider(
+              color: Colors.grey,
+              thickness: 1.0,
+              height: 1,
+            ),
+            SizedBox(height: 10),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildTabContent(width, true), // تتری
+                  _buildTabContent(width, false), // تومانی
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

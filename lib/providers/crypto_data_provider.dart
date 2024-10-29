@@ -21,8 +21,7 @@ class CryptoDataProvider with ChangeNotifier {
   bool _isLoading = true;
   CurrencyType _selectedCurrency = CurrencyType.irt;
 
-  final numberFormat = NumberFormat('#,###');
-  final numberFormat2 = NumberFormat('#,##0.##');
+  final numberFormat = NumberFormat('#,##0.###');
 
   // تعریف متغیرهای نگهدارنده وضعیت فیلترها برای هر نوع ارز
   Map<CurrencyType, SortOrder> _priceOrder = {
@@ -253,7 +252,7 @@ class CryptoDataProvider with ChangeNotifier {
             coin['name'],
             formattedPrice,
             double.tryParse(cryptoStats['dayChange'].toString()),
-            null,
+            coin['marketCap'],
             null,
             null,
             null,
@@ -279,7 +278,7 @@ class CryptoDataProvider with ChangeNotifier {
             coin['name'],
             formattedPrice,
             double.tryParse(cryptoStats['dayChange'].toString()),
-            null,
+            coin['marketCap'],
             null,
             null,
             null,
